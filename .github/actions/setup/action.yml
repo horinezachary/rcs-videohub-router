@@ -14,6 +14,12 @@ runs:
       with:
         node-version: 22
         cache: npm
+    - name: Check the RCS_SOURCE_TOKEN secret
+      shell: bash
+      env:
+        TOKEN: ${{ inputs.token }}
+      run: |
+        test -n "$TOKEN" || { echo "::error::The RCS_SOURCE_TOKEN secret is not set. Add a fine-grained token with Contents read-only on horinezachary/rack-control-surface (Settings > Secrets and variables > Actions)."; exit 1; }
     - id: ref
       shell: bash
       run: echo "ref=$(node -p "require('./package.json').rcs.sdkRef")" >> "$GITHUB_OUTPUT"
