@@ -1,0 +1,75 @@
+# Every merge to main is a release, versioned like the main repo: "feat:" in the PR title is a minor
+# bump, "!:" or "BREAKING CHANGE" a major one, anything else a patch, and "[skip release]" skips it
+# (.github/scripts/next-version.sh). The first release is the version in module.json. After that the
+# tag is the version: it is stamped into module.json for the package, so nobody bumps it by hand.
+#
+# Secrets: RCS_SIGNING_KEY (the private key from `rcs-pack keygen`; its public half is this module's
+# entry in horinezachary/rcs-releases index.json) and RCS_SOURCE_TOKEN (see .github/actions/setup).
+# Units see a new release as "Update available" within 24 hours and install it only when tapped.
+name: release
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+concurrency:
+  group: release
+  cancel-in-progress: false
+jobs:
+  release:
+    if: ${{ !contains(github.event.head_commit.message, '[skip release]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: v
+        run: |
+          if git tag --points-at HEAD | grep -q '^v'; then echo "Already released."; exit 0; fi
+          last=$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || true)
+          if [ -z "$last" ]; then
+            next=$(node -p "require('./module.json').version")
+          else
+            next=$(.github/scripts/next-version.sh "${last#v}" "$last..HEAD")
+          fi
+          echo "Releasing v$next"
+          echo "tag=v$next" >> "$GITHUB_OUTPUT"
+          echo "previous=$last" >> "$GITHUB_OUTPUT"
+      - if: steps.v.outputs.tag != ''
+        uses: ./.github/actions/setup
+        with:
+          token: ${{ secrets.RCS_SOURCE_TOKEN }}
+      - if: steps.v.outputs.tag != ''
+        run: npm test
+      - name: Stamp the version into module.json
+        if: steps.v.outputs.tag != ''
+        env:
+          TAG: ${{ steps.v.outputs.tag }}
+        run: |
+          node -e '
+            const fs = require("fs");
+            for (const f of ["module.json", "package.json"]) {
+              const j = JSON.parse(fs.readFileSync(f, "utf8"));
+              j.version = process.env.TAG.slice(1);
+              fs.writeFileSync(f, JSON.stringify(j, null, 2) + "\n");
+            }'
+      - name: Pack and sign
+        if: steps.v.outputs.tag != ''
+        env:
+          RCS_SIGNING_KEY: ${{ secrets.RCS_SIGNING_KEY }}
+        run: |
+          test -n "$RCS_SIGNING_KEY" || { echo "The RCS_SIGNING_KEY secret is not set"; exit 1; }
+          npm run pack
+          npm run sign
+      - name: Tag and publish
+        if: steps.v.outputs.tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.v.outputs.tag }}
+          PREVIOUS: ${{ steps.v.outputs.previous }}
+        run: |
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" tag -a "$TAG" "$GITHUB_SHA" -m "$TAG"
+          git push origin "refs/tags/$TAG"
+          notes=()
+          if [ -n "$PREVIOUS" ]; then notes=(--notes-start-tag "$PREVIOUS"); fi
+          gh release create "$TAG" release/*.zip release/*.zip.sig --title "Videohub Router ${TAG#v}" --generate-notes "${notes[@]}" --latest

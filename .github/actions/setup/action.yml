@@ -1,0 +1,36 @@
+# Installs this module and links the SDK from the main rack-control-surface repo, which is private
+# until the SDK is on npm. Checks out the main repo at package.json "rcs.sdkRef" with the
+# RCS_SOURCE_TOKEN secret: a fine-grained token with Contents read-only on that repo alone.
+name: setup
+description: npm ci, then link the SDK from the main repo
+inputs:
+  token:
+    description: RCS_SOURCE_TOKEN
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22
+        cache: npm
+    - name: Check the RCS_SOURCE_TOKEN secret
+      shell: bash
+      env:
+        TOKEN: ${{ inputs.token }}
+      run: |
+        test -n "$TOKEN" || { echo "::error::The RCS_SOURCE_TOKEN secret is not set. Add a fine-grained token with Contents read-only on horinezachary/rack-control-surface (Settings > Secrets and variables > Actions)."; exit 1; }
+    - id: ref
+      shell: bash
+      run: echo "ref=$(node -p "require('./package.json').rcs.sdkRef")" >> "$GITHUB_OUTPUT"
+    - uses: actions/checkout@v4
+      with:
+        repository: horinezachary/rack-control-surface
+        ref: ${{ steps.ref.outputs.ref }}
+        token: ${{ inputs.token }}
+        path: .rcs-sdk
+    - shell: bash
+      run: |
+        (cd .rcs-sdk && npm ci && npm run build)
+        npm ci
+        npm run link-sdk -- .rcs-sdk

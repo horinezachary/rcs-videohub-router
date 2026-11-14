@@ -1,0 +1,7 @@
+node_modules/
+dist/
+release/
+*.tsbuildinfo
+rcs-signing.key
+.rcs-sdk/
+.rcs-sim/

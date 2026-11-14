@@ -1,0 +1,340 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      body { padding: 24px; }
+      section { display: flex; flex-direction: column; gap: 16px; max-width: 1400px; }
+      header { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+      h2 { margin: 0; font-size: 22px; }
+      h3 { margin: 8px 0 0; font-size: 13px; font-weight: 600; letter-spacing: 0.08em; color: var(--rcs-muted); }
+      .device { font: 14px var(--rcs-mono); color: var(--rcs-muted); }
+      .grow { flex: 1; }
+      p, .note { margin: 0; color: var(--rcs-muted); font-size: 15px; line-height: 1.5; }
+      .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 10px; }
+      .tiles rcs-tile { min-height: 84px; }
+      .selected { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font: 700 20px var(--rcs-mono); min-height: 56px; }
+      .selected .arrow, .selected .src { color: var(--rcs-accent); }
+      .card { border: 1px solid var(--rcs-border); border-radius: 14px; background: var(--rcs-surface); padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+      .row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+      input[type=text] { min-height: 44px; border-radius: 10px; border: 1px solid var(--rcs-border); background: var(--rcs-bg); color: var(--rcs-text);
+        padding: 0 12px; font: 16px var(--rcs-font); min-width: 0; }
+      input[type=text]:focus { outline: 2px solid var(--rcs-accent); border-color: transparent; }
+      .picks { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 6px 16px; }
+      .picks label { display: flex; align-items: center; gap: 8px; font-size: 15px; min-height: 32px; }
+      .picks input { width: 18px; height: 18px; accent-color: var(--rcs-accent); }
+      .routes { font-size: 14px; color: var(--rcs-muted); line-height: 1.6; }
+      table { width: 100%; border-collapse: collapse; }
+      th { text-align: left; font-size: 13px; font-weight: 600; color: var(--rcs-muted); padding: 8px; border-bottom: 1px solid var(--rcs-border); }
+      td { padding: 6px 8px; border-bottom: 1px solid var(--rcs-border); font-size: 15px; }
+      td.num { font-family: var(--rcs-mono); color: var(--rcs-muted); width: 4em; }
+      td input { width: 100%; font-family: var(--rcs-mono) !important; }
+      .labels { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 24px; align-items: start; }
+      .lock { color: var(--rcs-error); font-weight: 600; font-size: 13px; }
+      .setup { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 24px; align-items: start; }
+      dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 8px 18px; font-size: 15px; }
+      dt { color: var(--rcs-muted); }
+      dd { margin: 0; font-family: var(--rcs-mono); }
+    </style>
+  </head>
+  <body>
+    <!-- The web view's pages. The selected destination here belongs to this browser, so picking one
+         never moves the panel; routes, salvos and labels are the backend's and the router's. -->
+    <header style="margin-bottom: 20px">
+      <span class="device" id="device"></span>
+      <rcs-status id="status" connection="disconnected"></rcs-status>
+    </header>
+
+    <section id="page-routes">
+      <p id="offline" hidden></p>
+      <div id="grid" style="display: contents">
+        <div class="selected">
+          <span id="selDest"></span><span class="arrow">←</span><span class="src" id="selSrc"></span>
+          <div class="grow"></div>
+          <rcs-button id="cancel" size="small" hidden>Cancel</rcs-button>
+          <rcs-button id="take" variant="primary" hidden>TAKE</rcs-button>
+        </div>
+        <h3>DESTINATIONS</h3>
+        <div class="tiles" id="dests"></div>
+        <h3>SOURCES</h3>
+        <div class="tiles" id="srcs"></div>
+        <p id="routeHelp"></p>
+      </div>
+    </section>
+
+    <section id="page-salvos" hidden>
+      <div class="card">
+        <div class="row">
+          <strong>Store a salvo</strong>
+          <input type="text" id="newName" placeholder="Name, e.g. Show" maxlength="32" aria-label="Salvo name" />
+          <div class="grow"></div>
+          <rcs-button id="all" size="small">All</rcs-button>
+          <rcs-button id="none" size="small">None</rcs-button>
+          <rcs-button id="store" variant="primary" size="small">Store current routes</rcs-button>
+        </div>
+        <p>Tick the destinations to include. Their routes right now become the salvo.</p>
+        <div class="picks" id="picks"></div>
+      </div>
+      <div id="salvoList" style="display: flex; flex-direction: column; gap: 12px"></div>
+    </section>
+
+    <section id="page-labels" hidden>
+      <p>Labels live on the router, so renaming here renames them for every control panel and app. Press Enter to send a new label.</p>
+      <div class="labels">
+        <table><thead><tr><th>Input</th><th>Label</th></tr></thead><tbody id="inputs"></tbody></table>
+        <table><thead><tr><th>Output</th><th>Label</th><th>Source</th><th></th></tr></thead><tbody id="outputs"></tbody></table>
+      </div>
+    </section>
+
+    <section id="page-setup" hidden>
+      <div class="setup">
+        <div style="display: flex; flex-direction: column; gap: 16px">
+          <rcs-field id="address" label="Router IP address" kind="ip" placeholder="192.168.1.50"></rcs-field>
+          <rcs-field id="port" label="Port" kind="number"></rcs-field>
+          <div class="row"><rcs-button id="reconnect" size="small">Reconnect</rcs-button></div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 16px">
+          <div class="row"><rcs-toggle id="takeMode" label="Take mode"></rcs-toggle><span>Take mode</span></div>
+          <p>Off: tapping a source routes it at once. On: tapping a source arms it, and TAKE (key 15 on the panel) routes it.</p>
+        </div>
+        <dl id="info"></dl>
+      </div>
+    </section>
+
+    <rcs-dialog id="confirm">
+      <span id="confirmText"></span>
+      <div slot="buttons">
+        <rcs-button id="no">Cancel</rcs-button>
+        <rcs-button id="yes" variant="primary">OK</rcs-button>
+      </div>
+    </rcs-dialog>
+
+    <script type="module">
+      const $ = (id) => document.getElementById(id);
+      const PAGES = ['routes', 'salvos', 'labels', 'setup'];
+      let s = null;
+      let page = 'routes';
+      let dest = 0; // this browser's selection
+      let armed = null; // this browser's armed source, in take mode
+      let picked = null; // outputs ticked for a new salvo
+      let onYes = null;
+
+      function el(tag, attrs = {}, text) {
+        const e = document.createElement(tag);
+        for (const [k, v] of Object.entries(attrs)) {
+          if (v === true) e.setAttribute(k, '');
+          else if (v !== false && v != null) e.setAttribute(k, String(v));
+        }
+        if (text != null) e.textContent = text;
+        return e;
+      }
+      const ask = (text, label, variant, fn) => {
+        $('confirmText').textContent = text;
+        $('yes').textContent = label;
+        $('yes').setAttribute('variant', variant);
+        onYes = fn;
+        $('confirm').show();
+      };
+      $('no').onclick = () => $('confirm').close();
+      $('yes').onclick = () => {
+        $('confirm').close();
+        onYes?.();
+      };
+      const inName = (n) => s.router.inputLabels[n] ?? `In ${n + 1}`;
+      const outName = (n) => s.router.outputLabels[n] ?? `Out ${n + 1}`;
+
+      function show(p) {
+        page = PAGES.includes(p) ? p : 'routes';
+        for (const id of PAGES) $('page-' + id).hidden = id !== page;
+        draw();
+      }
+
+      function drawRoutes() {
+        const r = s.router;
+        const live = s.ready && r.outputs > 0;
+        $('offline').hidden = live;
+        $('grid').style.display = live ? 'contents' : 'none';
+        if (!live) {
+          $('offline').textContent = s.config.address ? s.statusText || 'Connecting…' : 'No router set yet. Add its IP address on the Setup page.';
+          return;
+        }
+        dest = Math.min(dest, r.outputs - 1);
+        const take = s.config.takeMode;
+        if (!take) armed = null;
+        $('selDest').textContent = `${dest + 1} ${outName(dest)}`;
+        const shown = armed ?? r.routes[dest];
+        $('selSrc').textContent = shown >= 0 ? `${shown + 1} ${inName(shown)}` : '?';
+        $('take').hidden = !take;
+        $('take').disabled = armed === null;
+        $('cancel').hidden = armed === null;
+        $('routeHelp').textContent = take ? 'Pick a destination, pick a source, then press TAKE.' : 'Pick a destination, then a source: the route is made at once.';
+        $('dests').replaceChildren(
+          ...r.outputLabels.map((l, o) => {
+            const from = r.routes[o];
+            const t = el('rcs-tile', { number: o + 1, label: l, sublabel: r.locks[o] === 'L' ? 'LOCKED' : '← ' + (from >= 0 ? inName(from) : '?'), selected: o === dest });
+            t.onclick = () => {
+              dest = o;
+              armed = null;
+              draw();
+            };
+            return t;
+          })
+        );
+        const locked = r.locks[dest] === 'L';
+        $('srcs').replaceChildren(
+          ...r.inputLabels.map((l, i) => {
+            const t = el('rcs-tile', { number: i + 1, label: l, on: r.routes[dest] === i, selected: armed === i, disabled: locked });
+            t.onclick = () => {
+              if (take) {
+                armed = armed === i ? null : i;
+                draw();
+              } else rcs.send({ type: 'route', output: dest, input: i });
+            };
+            return t;
+          })
+        );
+      }
+
+      function drawSalvos() {
+        const r = s.router;
+        if (picked === null && r.outputs) picked = new Set(r.outputLabels.map((_, o) => o));
+        if (picked === null) picked = new Set();
+        $('picks').replaceChildren(
+          ...r.outputLabels.map((l, o) => {
+            const box = el('input', { type: 'checkbox' });
+            box.checked = picked.has(o);
+            box.onchange = () => {
+              box.checked ? picked.add(o) : picked.delete(o);
+            };
+            const lab = el('label');
+            lab.append(box, document.createTextNode(`${o + 1} ${l}`));
+            return lab;
+          })
+        );
+        $('store').disabled = !s.ready;
+        if (!s.salvos.length) {
+          $('salvoList').replaceChildren(el('p', {}, 'No salvos yet.'));
+          return;
+        }
+        $('salvoList').replaceChildren(
+          ...s.salvos.map((v, idx) => {
+            const card = el('div', { class: 'card' });
+            const name = el('input', { type: 'text', maxlength: 32, 'aria-label': 'Salvo name' });
+            name.value = v.name;
+            const rename = () => name.value.trim() && name.value !== v.name && rcs.send({ type: 'salvo-rename', id: v.id, name: name.value });
+            name.onkeydown = (e) => e.key === 'Enter' && name.blur();
+            name.onblur = rename;
+            const up = el('rcs-button', { size: 'small', disabled: idx === 0, 'aria-label': 'Move up' }, '▲');
+            up.onclick = () => rcs.send({ type: 'salvo-move', id: v.id, by: -1 });
+            const down = el('rcs-button', { size: 'small', disabled: idx === s.salvos.length - 1, 'aria-label': 'Move down' }, '▼');
+            down.onclick = () => rcs.send({ type: 'salvo-move', id: v.id, by: 1 });
+            const recall = el('rcs-button', { variant: 'primary', size: 'small', disabled: !s.ready }, 'Recall');
+            recall.onclick = () => ask(`Recall "${v.name}"? It changes up to ${v.routes.length} routes on the router.`, 'Recall', 'primary', () => rcs.send({ type: 'salvo-recall', id: v.id }));
+            const del = el('rcs-button', { variant: 'danger', size: 'small' }, 'Delete');
+            del.onclick = () => ask(`Delete the salvo "${v.name}"? The router's routes do not change.`, 'Delete', 'danger', () => rcs.send({ type: 'salvo-delete', id: v.id }));
+            const row = el('div', { class: 'row' });
+            row.append(name, el('span', { class: 'note' }, idx < 2 ? `Panel key ${14 + idx} (hold)` : ''), el('div', { class: 'grow' }), up, down, recall, del);
+            card.append(row, el('div', { class: 'routes' }, v.routes.map(([o, i]) => `${outName(o)} ← ${inName(i)}`).join(' · ')));
+            return card;
+          })
+        );
+      }
+
+      function labelRow(kind, index, label, extra) {
+        const tr = el('tr');
+        const input = el('input', { type: 'text', maxlength: 64, 'aria-label': `${kind} ${index + 1} label`, disabled: !s.ready });
+        input.value = label;
+        input.onkeydown = (e) => {
+          if (e.key === 'Enter') input.blur();
+          if (e.key === 'Escape') {
+            input.value = label;
+            input.blur();
+          }
+        };
+        input.onblur = () => {
+          if (input.value.trim() && input.value !== label) rcs.send({ type: 'label', kind, index, label: input.value });
+          else input.value = label;
+        };
+        const td = el('td');
+        td.append(input);
+        tr.append(el('td', { class: 'num' }, index + 1), td, ...extra);
+        return tr;
+      }
+
+      function drawLabels() {
+        const r = s.router;
+        if (document.activeElement?.closest?.('#page-labels')) return; // do not redraw under someone typing
+        $('inputs').replaceChildren(...r.inputLabels.map((l, i) => labelRow('input', i, l, [])));
+        $('outputs').replaceChildren(
+          ...r.outputLabels.map((l, o) =>
+            labelRow('output', o, l, [el('td', { class: 'note' }, r.routes[o] >= 0 ? inName(r.routes[o]) : '?'), el('td', { class: 'lock' }, r.locks[o] === 'L' ? 'LOCKED' : '')])
+          )
+        );
+      }
+
+      function drawSetup() {
+        const r = s.router;
+        if (!$('address').hasAttribute('editing')) $('address').value = s.config.address;
+        $('port').value = String(s.config.port);
+        $('takeMode').checked = s.config.takeMode;
+        const rows = [
+          ['Status', s.statusText || s.connection],
+          ['Model', r.model ?? '—'],
+          ['Name', r.name ?? '—'],
+          ['Ports', r.outputs ? `${r.inputs} in × ${r.outputs} out` : '—'],
+          ['Protocol', r.protocol ?? '—']
+        ];
+        $('info').replaceChildren(...rows.flatMap(([k, v]) => [el('dt', {}, k), el('dd', {}, v)]));
+      }
+
+      function draw() {
+        if (!s) return;
+        const r = s.router;
+        $('status').setAttribute('connection', s.connection);
+        $('status').textContent = s.ready ? 'Connected' : '';
+        $('device').textContent = s.ready ? `${r.name || r.model || 'Videohub'} · ${r.inputs}×${r.outputs} · ${s.config.address}` : s.config.address;
+        if (page === 'routes') drawRoutes();
+        if (page === 'salvos') drawSalvos();
+        if (page === 'labels') drawLabels();
+        if (page === 'setup') drawSetup();
+      }
+
+      $('take').onclick = () => {
+        if (armed === null) return;
+        rcs.send({ type: 'route', output: dest, input: armed });
+        armed = null;
+        draw();
+      };
+      $('cancel').onclick = () => {
+        armed = null;
+        draw();
+      };
+      $('all').onclick = () => {
+        picked = new Set(s.router.outputLabels.map((_, o) => o));
+        draw();
+      };
+      $('none').onclick = () => {
+        picked = new Set();
+        draw();
+      };
+      $('store').onclick = () => {
+        rcs.send({ type: 'salvo-store', name: $('newName').value, outputs: [...picked] });
+        $('newName').value = '';
+      };
+      $('reconnect').onclick = () => rcs.send({ type: 'reconnect' });
+      $('address').addEventListener('change', (e) => e.detail !== s?.config.address && rcs.send({ type: 'config', config: { address: e.detail } }));
+      $('port').addEventListener('change', (e) => Number(e.detail) !== s?.config.port && rcs.send({ type: 'config', config: { port: Number(e.detail) } }));
+      $('takeMode').addEventListener('change', (e) => rcs.send({ type: 'config', config: { takeMode: e.detail } }));
+
+      const info = await rcs.ready();
+      rcs.on('page', show);
+      rcs.on('message', (m) => {
+        if (m?.type !== 'snapshot') return;
+        s = m;
+        draw();
+      });
+      show(info.page);
+      rcs.send({ type: 'hello' });
+    </script>
+  </body>
+</html>

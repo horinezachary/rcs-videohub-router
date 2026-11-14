@@ -1,0 +1,299 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      html, body { height: 100%; overflow: hidden; }
+      main { height: 100%; display: flex; flex-direction: column; padding: 18px 36px 20px; gap: 12px; }
+      header { display: flex; align-items: center; gap: 16px; min-height: 48px; }
+      h1 { margin: 0; font-size: 26px; font-weight: 700; white-space: nowrap; }
+      .device { font: 15px var(--rcs-mono); color: var(--rcs-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .grow { flex: 1; }
+      .selected { display: flex; align-items: baseline; gap: 12px; white-space: nowrap; }
+      .selected .k { font-size: 18px; color: var(--rcs-muted); }
+      .selected .d, .selected .s { font: 700 22px var(--rcs-mono); }
+      .selected .s, .selected .arrow { color: var(--rcs-accent); font-size: 22px; }
+      .bar { display: flex; align-items: center; gap: 12px; min-height: 28px; }
+      .cap { font-size: 13px; font-weight: 600; letter-spacing: 0.08em; color: var(--rcs-muted); }
+      .pager { display: flex; align-items: center; gap: 10px; font: 13px var(--rcs-mono); color: var(--rcs-muted); }
+      .pager button { min-width: 64px; height: 36px; border-radius: 10px; border: 1px solid var(--rcs-border); background: var(--rcs-surface);
+        color: var(--rcs-text); font: 600 16px var(--rcs-font); cursor: pointer; }
+      .pager button:disabled { opacity: 0.35; }
+      .tiles { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 10px; height: 120px; }
+      .tiles rcs-tile { height: 100%; }
+      .empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; text-align: center; }
+      .empty p { margin: 0; color: var(--rcs-muted); font-size: 17px; max-width: 760px; line-height: 1.5; }
+      .scroll { flex: 1; min-height: 0; overflow-y: auto; }
+      .salvos { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+      .salvo { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border: 1px solid var(--rcs-border); border-radius: 14px; background: var(--rcs-surface); min-height: 84px; }
+      .salvo .t { flex: 1; min-width: 0; }
+      .salvo .n { font-size: 18px; font-weight: 600; }
+      .salvo .r { font-size: 13px; color: var(--rcs-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 4px; }
+      .note { margin: 0; color: var(--rcs-muted); font-size: 14px; }
+      .ports { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+      .ports table { width: 100%; border-collapse: collapse; font-size: 15px; }
+      .ports td { padding: 7px 8px; border-bottom: 1px solid var(--rcs-border); white-space: nowrap; }
+      .ports td.num { font-family: var(--rcs-mono); color: var(--rcs-muted); width: 3em; }
+      .ports td.lbl { font-weight: 600; font-family: var(--rcs-mono); }
+      .ports td.dim { color: var(--rcs-muted); }
+      .lock { color: var(--rcs-error); font-weight: 600; }
+      .setup { flex: 1; display: grid; grid-template-columns: 340px 200px 1fr; gap: 32px; align-items: start; }
+      .setup .col { display: flex; flex-direction: column; gap: 16px; }
+      .toggle { display: flex; align-items: center; gap: 14px; font-size: 17px; }
+      dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 8px 18px; font-size: 15px; }
+      dt { color: var(--rcs-muted); }
+      dd { margin: 0; font-family: var(--rcs-mono); }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1 id="title">Videohub Router</h1>
+        <span class="device" id="device"></span>
+        <rcs-status id="status" connection="disconnected"></rcs-status>
+        <div class="grow"></div>
+        <div class="selected" id="selected" hidden>
+          <span class="k">Selected</span><span class="d" id="selDest"></span><span class="arrow">←</span><span class="s" id="selSrc"></span>
+        </div>
+        <rcs-button id="cancel" size="small" hidden>Cancel</rcs-button>
+        <rcs-button id="take" variant="primary" hidden>TAKE</rcs-button>
+      </header>
+
+      <section id="view-routes" style="display: contents">
+        <div class="empty" id="offline" hidden>
+          <p id="offlineText"></p>
+          <rcs-button id="toSetup" variant="primary">Open Setup</rcs-button>
+        </div>
+        <div id="grid" style="display: contents">
+          <div class="bar"><span class="cap">DESTINATIONS</span><div class="grow"></div><div class="pager" id="destPager"></div></div>
+          <div class="tiles" id="dests"></div>
+          <div class="bar"><span class="cap">SOURCES</span><div class="grow"></div><div class="pager" id="srcPager"></div></div>
+          <div class="tiles" id="srcs"></div>
+        </div>
+      </section>
+
+      <section id="view-salvos" class="scroll" hidden>
+        <div class="bar" style="margin-bottom: 12px">
+          <p class="note">A salvo recalls a set of routes in one go. Hold key 14 or 15 to recall the first two. Rename salvos and choose their destinations in the web view.</p>
+          <div class="grow"></div>
+          <rcs-button id="store" variant="primary" size="small">Store current routes</rcs-button>
+        </div>
+        <div class="salvos" id="salvoList"></div>
+      </section>
+
+      <section id="view-labels" class="scroll" hidden>
+        <p class="note" style="margin-bottom: 10px">Labels come from the router. Rename them in the web view's Labels page.</p>
+        <div class="ports">
+          <table><tbody id="inputs"></tbody></table>
+          <table><tbody id="outputs"></tbody></table>
+        </div>
+      </section>
+
+      <section id="view-setup" class="setup" hidden>
+        <div class="col">
+          <rcs-field id="address" label="Router address" kind="ip" placeholder="192.168.1.50"></rcs-field>
+          <rcs-button id="reconnect" size="small">Reconnect</rcs-button>
+        </div>
+        <div class="col">
+          <rcs-field id="port" label="Port" kind="number"></rcs-field>
+        </div>
+        <div class="col">
+          <label class="toggle"><rcs-toggle id="takeMode" label="Take mode"></rcs-toggle>Take mode: pick a source, then press TAKE</label>
+          <dl id="info"></dl>
+        </div>
+      </section>
+    </main>
+
+    <rcs-dialog id="confirm">
+      <span id="confirmText"></span>
+      <div slot="buttons">
+        <rcs-button id="no">Cancel</rcs-button>
+        <rcs-button id="yes" variant="primary">OK</rcs-button>
+      </div>
+    </rcs-dialog>
+
+    <script type="module">
+      const $ = (id) => document.getElementById(id);
+      const PER = 12;
+      let s = null;
+      let destPage = 0;
+      let srcPage = 0;
+      let lastSel = -1;
+      let onYes = null;
+
+      function el(tag, attrs = {}, text) {
+        const e = document.createElement(tag);
+        for (const [k, v] of Object.entries(attrs)) {
+          if (v === true) e.setAttribute(k, '');
+          else if (v !== false && v != null) e.setAttribute(k, String(v));
+        }
+        if (text != null) e.textContent = text;
+        return e;
+      }
+
+      function ask(text, label, variant, fn) {
+        $('confirmText').textContent = text;
+        $('yes').textContent = label;
+        $('yes').setAttribute('variant', variant);
+        onYes = fn;
+        $('confirm').show();
+      }
+      $('no').onclick = () => $('confirm').close();
+      $('yes').onclick = () => {
+        $('confirm').close();
+        onYes?.();
+      };
+
+      function pager(box, page, count, set) {
+        box.replaceChildren();
+        const pages = Math.ceil(count / PER);
+        if (pages <= 1) return;
+        const prev = el('button', { 'aria-label': 'Previous page' }, '◀');
+        const next = el('button', { 'aria-label': 'Next page' }, '▶');
+        prev.disabled = page === 0;
+        next.disabled = page >= pages - 1;
+        prev.onclick = () => set(page - 1);
+        next.onclick = () => set(page + 1);
+        box.append(prev, el('span', {}, `${page * PER + 1}–${Math.min(count, (page + 1) * PER)} of ${count}`), next);
+      }
+
+      function drawRoutes() {
+        const r = s.router;
+        const live = s.ready && r.outputs > 0;
+        $('offline').hidden = live;
+        $('grid').style.display = live ? 'contents' : 'none';
+        if (!live) {
+          $('offlineText').textContent = s.config.address ? `${s.statusText || 'Connecting…'}` : 'No router set. Type its IP address in Setup.';
+          $('toSetup').hidden = !!s.config.address;
+          return;
+        }
+        if (s.selDest !== lastSel) destPage = Math.floor(s.selDest / PER); // follow the keys
+        lastSel = s.selDest;
+        destPage = Math.min(destPage, Math.ceil(r.outputs / PER) - 1);
+        srcPage = Math.min(srcPage, Math.ceil(r.inputs / PER) - 1);
+
+        const dests = [];
+        for (let o = destPage * PER; o < Math.min(r.outputs, (destPage + 1) * PER); o++) {
+          const from = r.routes[o];
+          const t = el('rcs-tile', {
+            number: o + 1,
+            label: r.outputLabels[o],
+            sublabel: r.locks[o] === 'L' ? 'LOCKED' : '← ' + (from >= 0 ? r.inputLabels[from] : '?'),
+            selected: o === s.selDest
+          });
+          t.onclick = () => rcs.send({ type: 'select-dest', output: o });
+          dests.push(t);
+        }
+        $('dests').replaceChildren(...dests);
+        pager($('destPager'), destPage, r.outputs, (p) => ((destPage = p), drawRoutes()));
+
+        const srcs = [];
+        const locked = r.locks[s.selDest] === 'L';
+        for (let i = srcPage * PER; i < Math.min(r.inputs, (srcPage + 1) * PER); i++) {
+          const t = el('rcs-tile', { number: i + 1, label: r.inputLabels[i], on: r.routes[s.selDest] === i, selected: s.armed === i, disabled: locked });
+          t.onclick = () => rcs.send({ type: 'pick-source', input: i });
+          srcs.push(t);
+        }
+        $('srcs').replaceChildren(...srcs);
+        pager($('srcPager'), srcPage, r.inputs, (p) => ((srcPage = p), drawRoutes()));
+      }
+
+      function drawSalvos() {
+        const r = s.router;
+        const name = (list, n) => list[n] ?? `#${n + 1}`;
+        $('store').disabled = !s.ready;
+        if (!s.salvos.length) {
+          $('salvoList').replaceChildren(el('p', { class: 'note' }, 'No salvos yet. Set up the routes you want, then tap Store current routes.'));
+          return;
+        }
+        $('salvoList').replaceChildren(
+          ...s.salvos.map((v, idx) => {
+            const box = el('div', { class: 'salvo' });
+            const t = el('div', { class: 't' });
+            t.append(
+              el('div', { class: 'n' }, (idx < 2 ? `Key ${14 + idx} · ` : '') + v.name),
+              el('div', { class: 'r' }, `${v.routes.length} routes: ` + v.routes.map(([o, i]) => `${name(r.outputLabels, o)} ← ${name(r.inputLabels, i)}`).join(', '))
+            );
+            const recall = el('rcs-button', { variant: 'primary', size: 'small', disabled: !s.ready }, 'Recall');
+            recall.onclick = () => ask(`Recall "${v.name}"? It changes up to ${v.routes.length} routes on the router.`, 'Recall', 'primary', () => rcs.send({ type: 'salvo-recall', id: v.id }));
+            const del = el('rcs-button', { variant: 'danger', size: 'small' }, 'Delete');
+            del.onclick = () => ask(`Delete the salvo "${v.name}"? The router's routes do not change.`, 'Delete', 'danger', () => rcs.send({ type: 'salvo-delete', id: v.id }));
+            box.append(t, recall, del);
+            return box;
+          })
+        );
+      }
+
+      function drawLabels() {
+        const r = s.router;
+        const row = (n, label, extra, lockText) => {
+          const tr = el('tr');
+          tr.append(el('td', { class: 'num' }, n), el('td', { class: 'lbl' }, label), el('td', { class: 'dim' }, extra));
+          tr.append(el('td', { class: 'lock' }, lockText ?? ''));
+          return tr;
+        };
+        $('inputs').replaceChildren(el('tr', {}, ''), ...r.inputLabels.map((l, i) => row(`IN ${i + 1}`, l, '', '')));
+        $('inputs').firstChild.append(el('td', { class: 'dim', colspan: 4 }, `INPUTS (${r.inputs})`));
+        $('outputs').replaceChildren(el('tr'), ...r.outputLabels.map((l, o) => row(`OUT ${o + 1}`, l, '← ' + (r.routes[o] >= 0 ? r.inputLabels[r.routes[o]] : '?'), r.locks[o] === 'L' ? 'LOCKED' : r.locks[o] === 'O' ? 'OURS' : '')));
+        $('outputs').firstChild.append(el('td', { class: 'dim', colspan: 4 }, `OUTPUTS (${r.outputs})`));
+      }
+
+      function drawSetup() {
+        const r = s.router;
+        if (!$('address').matches('[editing]')) $('address').value = s.config.address;
+        if (!$('port').matches('[editing]')) $('port').value = String(s.config.port);
+        $('takeMode').checked = s.config.takeMode;
+        const rows = [
+          ['Status', s.statusText || s.connection],
+          ['Model', r.model ?? '—'],
+          ['Name', r.name ?? '—'],
+          ['Ports', r.outputs ? `${r.inputs} in × ${r.outputs} out` : '—'],
+          ['Protocol', r.protocol ?? '—']
+        ];
+        $('info').replaceChildren(...rows.flatMap(([k, v]) => [el('dt', {}, k), el('dd', {}, v)]));
+      }
+
+      function draw() {
+        if (!s) return;
+        const r = s.router;
+        for (const v of ['routes', 'salvos', 'labels', 'setup']) $('view-' + v).hidden = s.view !== v;
+        $('view-routes').style.display = s.view === 'routes' ? 'contents' : 'none';
+        $('status').setAttribute('connection', s.connection);
+        $('status').textContent = s.ready ? 'Connected' : '';
+        $('device').textContent = s.ready ? `${r.name || r.model || 'Videohub'} ${r.inputs}×${r.outputs} · ${s.config.address}` : s.config.address;
+        const live = s.ready && r.outputs > 0;
+        $('selected').hidden = !live || s.view !== 'routes';
+        if (live) {
+          $('selDest').textContent = r.outputLabels[s.selDest] ?? '';
+          const shown = s.armed ?? r.routes[s.selDest];
+          $('selSrc').textContent = shown >= 0 ? r.inputLabels[shown] : '?';
+        }
+        const armed = live && s.config.takeMode && s.armed !== null;
+        $('take').hidden = !(live && s.config.takeMode && s.view === 'routes');
+        $('take').disabled = !armed;
+        $('cancel').hidden = !armed || s.view !== 'routes';
+        if (s.view === 'routes') drawRoutes();
+        if (s.view === 'salvos') drawSalvos();
+        if (s.view === 'labels') drawLabels();
+        if (s.view === 'setup') drawSetup();
+      }
+
+      $('take').onclick = () => rcs.send({ type: 'take' });
+      $('cancel').onclick = () => rcs.send({ type: 'cancel' });
+      $('toSetup').onclick = () => rcs.send({ type: 'view', view: 'setup' });
+      $('store').onclick = () => rcs.send({ type: 'salvo-store' });
+      $('reconnect').onclick = () => rcs.send({ type: 'reconnect' });
+      $('address').addEventListener('change', (e) => rcs.send({ type: 'config', config: { address: e.detail } }));
+      $('port').addEventListener('change', (e) => rcs.send({ type: 'config', config: { port: Number(e.detail) } }));
+      $('takeMode').addEventListener('change', (e) => rcs.send({ type: 'config', config: { takeMode: e.detail } }));
+
+      await rcs.ready();
+      rcs.on('message', (m) => {
+        if (m?.type !== 'snapshot') return;
+        s = m;
+        draw();
+      });
+      rcs.send({ type: 'hello' });
+    </script>
+  </body>
+</html>
