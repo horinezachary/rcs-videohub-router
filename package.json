@@ -1,0 +1,37 @@
+{
+  "name": "rcs-videohub-router",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Rack control surface module: route sources to destinations on a Blackmagic Videohub",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "postinstall": "node scripts/link-sdk.mjs --if-found",
+    "link-sdk": "node scripts/link-sdk.mjs",
+    "build": "tsc",
+    "test": "tsc && vitest run",
+    "dev": "tsc && node node_modules/@rcs/panel/dist/dev.js --module . --watch",
+    "mock": "tsc && node dist/mock-cli.js",
+    "pack": "tsc && node node_modules/@rcs/module-sdk/dist/pack-cli.js pack",
+    "sign": "node node_modules/@rcs/module-sdk/dist/pack-cli.js sign"
+  },
+  "rcs": {
+    "files": [
+      "assets"
+    ],
+    "sdkRef": "v0.6.3"
+  },
+  "peerDependencies": {
+    "@rcs/module-sdk": ">=0.1.0"
+  },
+  "peerDependenciesMeta": {
+    "@rcs/module-sdk": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.2.0"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "id": "videohub-router",
+  "name": "Videohub Router",
+  "version": "0.1.0",
+  "description": "Route sources to destinations on a Blackmagic Videohub",
+  "icon": "assets/icon.svg",
+  "apiVersion": 1,
+  "entry": "dist/index.js",
+  "ui": "ui",
+  "configSchema": "config.schema.json",
+  "defaults": "config.defaults.json",
+  "web": {
+    "ui": "web",
+    "pages": [
+      { "id": "routes", "label": "Routes" },
+      { "id": "salvos", "label": "Salvos" },
+      { "id": "labels", "label": "Labels" },
+      { "id": "setup", "label": "Setup" }
+    ]
+  }
+}
