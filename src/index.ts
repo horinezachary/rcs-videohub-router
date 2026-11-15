@@ -337,6 +337,15 @@ async function setConfig(ctx: C, changes: Partial<Config>): Promise<void> {
   await draw(ctx);
 }
 
+/**
+ * Moves the strip highlight to a page the module opened on its own. strip.select is newer than
+ * some SDKs and hosts this module runs on: without it the highlight just stays where it was.
+ */
+function highlight(ctx: C, view: View): void {
+  const strip = ctx.strip as typeof ctx.strip & { select?(id: string): Promise<void> };
+  void strip.select?.(view).catch(() => {});
+}
+
 export default defineModule<State, Config>({
   holdMs: HOLD_MS,
 
@@ -422,7 +431,10 @@ export default defineModule<State, Config>({
         return;
       }
       case 'view':
-        if (['routes', 'salvos', 'labels', 'setup'].includes(m.view)) rt.view = m.view;
+        if (['routes', 'salvos', 'labels', 'setup'].includes(m.view)) {
+          rt.view = m.view;
+          highlight(ctx, m.view); // the UI changed page itself (e.g. Open Setup)
+        }
         return draw(ctx);
       case 'salvo-recall':
         return recallSalvo(ctx, String(m.id));
