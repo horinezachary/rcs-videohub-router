@@ -11,7 +11,7 @@
       .device { font: 14px var(--rcs-mono); color: var(--rcs-muted); }
       .grow { flex: 1; }
       p, .note { margin: 0; color: var(--rcs-muted); font-size: 15px; line-height: 1.5; }
-      .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 10px; }
+      .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(118px, 100%), 1fr)); gap: 10px; }
       .tiles rcs-tile { min-height: 84px; }
       .selected { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font: 700 20px var(--rcs-mono); min-height: 56px; }
       .selected .arrow, .selected .src { color: var(--rcs-accent); }
@@ -20,7 +20,7 @@
       input[type=text] { min-height: 44px; border-radius: 10px; border: 1px solid var(--rcs-border); background: var(--rcs-bg); color: var(--rcs-text);
         padding: 0 12px; font: 16px var(--rcs-font); min-width: 0; }
       input[type=text]:focus { outline: 2px solid var(--rcs-accent); border-color: transparent; }
-      .picks { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 6px 16px; }
+      .picks { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(190px, 100%), 1fr)); gap: 6px 16px; }
       .picks label { display: flex; align-items: center; gap: 8px; font-size: 15px; min-height: 32px; }
       .picks input { width: 18px; height: 18px; accent-color: var(--rcs-accent); }
       .routes { font-size: 14px; color: var(--rcs-muted); line-height: 1.6; }
@@ -29,9 +29,9 @@
       td { padding: 6px 8px; border-bottom: 1px solid var(--rcs-border); font-size: 15px; }
       td.num { font-family: var(--rcs-mono); color: var(--rcs-muted); width: 4em; }
       td input { width: 100%; font-family: var(--rcs-mono) !important; }
-      .labels { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 24px; align-items: start; }
+      .labels { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr)); gap: 24px; align-items: start; }
       .lock { color: var(--rcs-error); font-weight: 600; font-size: 13px; }
-      .setup { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 24px; align-items: start; }
+      .setup { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); gap: 24px; align-items: start; }
       dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 8px 18px; font-size: 15px; }
       dt { color: var(--rcs-muted); }
       dd { margin: 0; font-family: var(--rcs-mono); }
