@@ -19,7 +19,7 @@
       .pager button { min-width: 64px; height: 36px; border-radius: 10px; border: 1px solid var(--rcs-border); background: var(--rcs-surface);
         color: var(--rcs-text); font: 600 16px var(--rcs-font); cursor: pointer; }
       .pager button:disabled { opacity: 0.35; }
-      .tiles { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 10px; height: 120px; }
+      .tiles { --rows: 1; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); grid-auto-rows: 1fr; gap: 10px; height: calc(120px * var(--rows) + 10px * (var(--rows) - 1)); }
       .tiles rcs-tile { height: 100%; }
       .empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; text-align: center; }
       .empty p { margin: 0; color: var(--rcs-muted); font-size: 17px; max-width: 760px; line-height: 1.5; }
@@ -114,7 +114,19 @@
 
     <script type="module">
       const $ = (id) => document.getElementById(id);
-      const PER = 12;
+      // One row of 12 tiles per section on the 1920×440 bar; three rows on a taller screen (fullPanel).
+      let PER = 12;
+      function fitRows() {
+        const rows = window.innerHeight >= 700 ? 3 : 1;
+        PER = 12 * rows;
+        for (const t of document.querySelectorAll('.tiles')) t.style.setProperty('--rows', rows);
+      }
+      fitRows();
+      window.addEventListener('resize', () => {
+        const before = PER;
+        fitRows();
+        if (before !== PER && s) draw();
+      });
       let s = null;
       let destPage = 0;
       let srcPage = 0;
