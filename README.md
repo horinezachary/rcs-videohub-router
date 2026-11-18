@@ -8,8 +8,11 @@ Videohub Ethernet protocol on TCP port 9990.
   web view shows them all.
 - **Stream Deck**: keys 1 to 10 are sources (with more than 10 inputs, key 10 pages through them),
   keys 11 and 13 step through destinations and key 12 shows the selected one. Hold key 14 or 15 to
-  recall the first two salvos.
-- **Take mode** (Setup): a source press arms it, and TAKE (key 15, or the button on screen) routes it.
+  recall the first two salvos. On a larger deck (an XL, 8×4, or a Stream Deck + XL, 9×4) every row but
+  the bottom one holds sources, and the bottom row is the destination keys followed by more salvos
+  (needs controller 0.21.0; older ones give every module 15 keys).
+- **Take mode** (Setup): a source press arms it, and TAKE (key 15, the last key on a larger deck, or the
+  button on screen) routes it.
 - **Salvos**: store the router's current routes, for all or some destinations, and recall them in one
   go. Recalling asks first on screen and needs a held key on the Stream Deck.
 - **Labels**: shown on the panel, renamed in the web view. Labels live on the router.

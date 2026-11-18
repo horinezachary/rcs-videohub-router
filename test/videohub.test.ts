@@ -33,11 +33,15 @@ async function startHub(opts: ConstructorParameters<typeof MockVideohub>[0] = {}
   return hub.listen(0);
 }
 
-async function startModule(port: number, extra: { state?: State; config?: Partial<Config>; reason?: 'boot' | 'restore' | 'user' } = {}) {
+async function startModule(
+  port: number,
+  extra: { state?: State; config?: Partial<Config>; reason?: 'boot' | 'restore' | 'user'; deck?: { columns: number; rows: number } } = {}
+) {
   sim = await startTestModule(mod, {
     config: { address: '127.0.0.1', port, takeMode: false, ...extra.config },
     state: extra.state,
-    reason: extra.reason
+    reason: extra.reason,
+    deck: extra.deck
   });
   await until(() => sim!.status?.connection === 'connected');
   await sim.settle();
@@ -160,6 +164,27 @@ describe('module', () => {
     expect(sim!.keys[3]).toEqual({});
     await sim!.press(2);
     await until(() => hub!.routes[0] === 11);
+  });
+
+  it('shows every source and more salvos on an XL, and pages again when the deck changes', async () => {
+    const port = await startHub({ inputs: 30, inputLabels: [...LABELS, ...Array.from({ length: 18 }, (_, i) => `SRC ${i + 13}`)] });
+    const salvos = Array.from({ length: 6 }, (_, i) => ({ id: `s${i}`, name: `Salvo ${i + 1}`, routes: [[0, i]] as [number, number][] }));
+    await startModule(port, { deck: { columns: 8, rows: 4 }, state: { selDest: 0, srcPage: 0, salvos } });
+    expect(sim!.keys).toHaveLength(32);
+    expect(sim!.keys[11]).toMatchObject({ label: 'BARS', sublabel: 'IN 12' });
+    expect(sim!.keys[23]).toMatchObject({ label: 'MORE ▶', sublabel: 'page 1/2' }); // 30 inputs, 23 per page
+    expect(sim!.keys[24]).toMatchObject({ label: '◀ DEST' });
+    expect(sim!.keys[25]).toMatchObject({ label: 'LED WALL' });
+    expect(sim!.keys.slice(27).map((k) => k?.label)).toEqual(['Salvo 1', 'Salvo 2', 'Salvo 3', 'Salvo 4', 'Salvo 5']);
+    await sim!.press(20);
+    await until(() => hub!.routes[0] === 20);
+    await sim!.press(31, { holdMs: 800 }); // salvo 5
+    await until(() => hub!.routes[0] === 4);
+
+    await sim!.press(23); // page 2
+    await sim!.setDeck(5, 3);
+    expect(sim!.keys[KEY.PAGE]).toMatchObject({ label: 'MORE ▶', sublabel: 'page 2/4' });
+    expect(sim!.keys[KEY.SALVO2]).toMatchObject({ label: 'Salvo 2' });
   });
 
   it('arms a source and routes it on TAKE in take mode', async () => {
