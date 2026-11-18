@@ -63,6 +63,13 @@ It needs two Actions secrets:
 - `RCS_SOURCE_TOKEN`: a fine-grained token with Contents read-only on `rack-control-surface`, so the
   workflows can link the SDK from it. CI uses the tag in `package.json` `rcs.sdkRef`.
 
+## Icon
+
+`assets/icon.svg` is the Blackmagic Design mark, taken from [Simple Icons](https://simpleicons.org) 15.0.0
+(`blackmagicdesign.svg`; the drawing is CC0). Blackmagic Design and Videohub are trademarks of Blackmagic Design
+Pty. Ltd. The mark is used only to show which equipment this module works with. This module is not made or
+endorsed by Blackmagic Design.
+
 ## Layout
 
 | Path | What |
