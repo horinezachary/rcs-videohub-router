@@ -5,10 +5,13 @@
 // config holds the router's address. Starting, restoring and reconnecting only listen. A route,
 // salvo or label change goes out only when someone presses a key or taps the screen.
 //
-// Stream Deck:
+// Stream Deck (15 keys; a larger deck has more of each, laid out the same way: see layout()):
 //   keys 1-10   sources (with more than 10 inputs: 1-9, and key 10 pages through them)
 //   key 11      previous destination      key 12  selected destination      key 13  next destination
 //   key 14      salvo 1 (hold)            key 15  salvo 2 (hold), or TAKE in take mode
+// On a larger deck every row but the bottom one holds sources (24 on an XL, 27 on a Stream Deck + XL),
+// and the bottom row is ◀ DEST, the destination, DEST ▶, then a salvo on every other key (the last one
+// is TAKE in take mode).
 
 import { randomUUID } from 'node:crypto';
 import { defineModule, type Ctx, type KeySetParams } from '@rcs/module-sdk';
@@ -38,7 +41,42 @@ export interface Config {
 type C = Ctx<State, Config>;
 export type View = 'routes' | 'salvos' | 'labels' | 'setup';
 
+/** The keys on a 15-key deck. layout() gives them for any deck. */
 export const KEY = { PAGE: 9, PREV: 10, DEST: 11, NEXT: 12, SALVO1: 13, SALVO2: 14 } as const;
+
+export interface Grid {
+  columns: number;
+  rows: number;
+}
+
+/**
+ * The deck's grid. Read from ctx.host, not ctx.deck: a unit runs modules with its own controller's
+ * SDK, and one before 0.21.0 has no ctx.deck and reports no columns or rows (5 × 3).
+ */
+export function grid(ctx: { host: { deck: { columns?: number; rows?: number } } }): Grid {
+  return { columns: ctx.host?.deck?.columns ?? 5, rows: ctx.host?.deck?.rows ?? 3 };
+}
+
+export interface Layout {
+  /** Source keys, in order. The last one pages when there are more inputs than keys. */
+  sources: number[];
+  prev: number;
+  dest: number;
+  next: number;
+  /** Salvo keys, salvo 1 first. */
+  salvos: number[];
+  /** The last bottom key: TAKE in take mode, else the last salvo. */
+  take: number;
+}
+
+/** Where everything goes on a deck. For 5 × 3 this is KEY. */
+export function layout(g: Grid, takeMode: boolean): Layout {
+  const bottom = (g.rows - 1) * g.columns;
+  const take = bottom + g.columns - 1;
+  const salvos: number[] = [];
+  for (let c = 3; c < g.columns; c++) if (!(takeMode && bottom + c === take)) salvos.push(bottom + c);
+  return { sources: Array.from({ length: bottom }, (_, i) => i), prev: bottom, dest: bottom + 1, next: bottom + 2, salvos, take };
+}
 export const MAX_SALVOS = 32;
 const HOLD_MS = 700;
 
@@ -82,9 +120,14 @@ function short(s: string | undefined, n: number): string {
   return chars.length > n ? chars.slice(0, n).join('') : chars.join('');
 }
 
-function srcPaging(inputs: number): { perPage: number; pages: number } {
-  const perPage = inputs > 10 ? 9 : 10;
+/** keys: how many source keys the deck has (10 on a 15-key deck). With more inputs, the last one pages. */
+function srcPaging(inputs: number, keys = 10): { perPage: number; pages: number } {
+  const perPage = inputs > keys ? keys - 1 : keys;
   return { perPage, pages: Math.max(1, Math.ceil(inputs / perPage)) };
+}
+
+function paging(ctx: C, inputs = router().inputs) {
+  return srcPaging(inputs, layout(grid(ctx), cfg(ctx).takeMode).sources.length);
 }
 
 // ---- connection --------------------------------------------------------------------------------
@@ -121,7 +164,7 @@ function connect(ctx: C, force = false): void {
 /** A different router may have fewer ports than the saved selection. */
 async function clampSelection(ctx: C, r: RouterState): Promise<void> {
   const { selDest, srcPage } = ctx.state.value;
-  const pages = srcPaging(r.inputs).pages;
+  const pages = paging(ctx, r.inputs).pages;
   if ((r.outputs && selDest >= r.outputs) || srcPage >= pages) {
     await ctx.state.patch({ selDest: r.outputs && selDest >= r.outputs ? 0 : selDest, srcPage: srcPage >= pages ? 0 : srcPage });
   }
@@ -164,13 +207,14 @@ function keyFaces(ctx: C): KeySetParams[] {
   const armed = rt?.armed ?? null;
   const faces: KeySetParams[] = [];
   const live = ready() && r.outputs > 0;
-  const { perPage, pages } = srcPaging(r.inputs);
+  const L = layout(grid(ctx), takeMode);
+  const { perPage, pages } = paging(ctx, r.inputs);
 
-  for (let k = 0; k < 10; k++) {
-    const input = srcPage * perPage + k;
-    if (live && k === KEY.PAGE && pages > 1) {
+  for (const [n, k] of L.sources.entries()) {
+    const input = srcPage * perPage + n;
+    if (live && n === L.sources.length - 1 && pages > 1) {
       faces.push({ index: k, label: 'MORE ▶', sublabel: `page ${srcPage + 1}/${pages}` });
-    } else if (live && k < perPage && input < r.inputs) {
+    } else if (live && n < perPage && input < r.inputs) {
       const on = r.routes[selDest] === input;
       const isArmed = armed === input;
       faces.push({
@@ -187,29 +231,27 @@ function keyFaces(ctx: C): KeySetParams[] {
   if (live) {
     const locked = r.locks[selDest] === 'L';
     const from = r.routes[selDest] ?? -1;
-    faces.push({ index: KEY.PREV, label: '◀ DEST' });
+    faces.push({ index: L.prev, label: '◀ DEST' });
     faces.push({
-      index: KEY.DEST,
+      index: L.dest,
       label: short(r.outputLabels[selDest], 10),
       sublabel: locked ? 'LOCKED' : short('← ' + (from >= 0 ? r.inputLabels[from] : '?'), 12),
       background: locked ? DANGER : SELECTED
     });
-    faces.push({ index: KEY.NEXT, label: 'DEST ▶' });
+    faces.push({ index: L.next, label: 'DEST ▶' });
   } else {
-    faces.push({ index: KEY.PREV }, { index: KEY.DEST, label: 'OFFLINE', sublabel: short(cfg(ctx).address || 'no address', 12), background: DANGER }, { index: KEY.NEXT });
+    faces.push({ index: L.prev }, { index: L.dest, label: 'OFFLINE', sublabel: short(cfg(ctx).address || 'no address', 12), background: DANGER }, { index: L.next });
   }
 
   const salvoFace = (index: number, s: Salvo | undefined): KeySetParams =>
     s && live ? { index, label: short(s.name, 10), sublabel: 'salvo · hold' } : { index };
-  faces.push(salvoFace(KEY.SALVO1, salvos[0]));
+  L.salvos.forEach((k, n) => faces.push(salvoFace(k, salvos[n])));
   if (takeMode) {
     faces.push(
       live && armed !== null
-        ? { index: KEY.SALVO2, label: 'TAKE', sublabel: short(r.inputLabels[armed], 12), background: ACCENT, color: ON_ACCENT }
-        : { index: KEY.SALVO2, label: 'TAKE', sublabel: 'pick source' }
+        ? { index: L.take, label: 'TAKE', sublabel: short(r.inputLabels[armed], 12), background: ACCENT, color: ON_ACCENT }
+        : { index: L.take, label: 'TAKE', sublabel: 'pick source' }
     );
-  } else {
-    faces.push(salvoFace(KEY.SALVO2, salvos[1]));
   }
   return faces;
 }
@@ -371,26 +413,35 @@ export default defineModule<State, Config>({
 
   async key(ctx, { index, action }) {
     if (action !== 'down' || !rt) return;
-    const r = router();
-    const { perPage, pages } = srcPaging(r.inputs);
-    if (index < 10) {
-      if (index === KEY.PAGE && pages > 1) {
+    const L = layout(grid(ctx), cfg(ctx).takeMode);
+    const { perPage, pages } = paging(ctx);
+    const n = L.sources.indexOf(index);
+    if (n >= 0) {
+      if (n === L.sources.length - 1 && pages > 1) {
         await ctx.state.patch({ srcPage: (ctx.state.value.srcPage + 1) % pages });
         return draw(ctx);
       }
-      if (index < perPage) return pickSource(ctx, ctx.state.value.srcPage * perPage + index);
+      if (n < perPage) return pickSource(ctx, ctx.state.value.srcPage * perPage + n);
       return;
     }
-    if (index === KEY.PREV) return selectDest(ctx, ctx.state.value.selDest - 1);
-    if (index === KEY.NEXT) return selectDest(ctx, ctx.state.value.selDest + 1);
-    if (index === KEY.SALVO2 && cfg(ctx).takeMode) return take(ctx);
+    if (index === L.prev) return selectDest(ctx, ctx.state.value.selDest - 1);
+    if (index === L.next) return selectDest(ctx, ctx.state.value.selDest + 1);
+    if (index === L.take && cfg(ctx).takeMode) return take(ctx);
   },
 
   async hold(ctx, index) {
-    if (index === KEY.SALVO1 || (index === KEY.SALVO2 && !cfg(ctx).takeMode)) {
-      const salvo = ctx.state.value.salvos[index - KEY.SALVO1];
-      if (salvo) await recallSalvo(ctx, salvo.id);
-    }
+    const n = layout(grid(ctx), cfg(ctx).takeMode).salvos.indexOf(index);
+    const salvo = n >= 0 ? ctx.state.value.salvos[n] : undefined;
+    if (salvo) await recallSalvo(ctx, salvo.id);
+  },
+
+  fullDeck: true,
+
+  // Another deck was plugged in: sources per page changed, so keep the page in range and redraw.
+  async deck(ctx) {
+    await clampSelection(ctx, router());
+    await ctx.keys.clear();
+    await draw(ctx);
   },
 
   async strip(ctx, id) {
@@ -412,7 +463,7 @@ export default defineModule<State, Config>({
         return selectDest(ctx, Number(m.output));
       case 'src-page': {
         const page = Number(m.page);
-        if (Number.isInteger(page) && page >= 0 && page < srcPaging(router().inputs).pages) await ctx.state.patch({ srcPage: page });
+        if (Number.isInteger(page) && page >= 0 && page < paging(ctx).pages) await ctx.state.patch({ srcPage: page });
         return draw(ctx);
       }
       case 'pick-source':
