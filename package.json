@@ -19,7 +19,7 @@
     "files": [
       "assets"
     ],
-    "sdkRef": "v0.21.0"
+    "sdkRef": "v0.22.0"
   },
   "peerDependencies": {
     "@rcs/module-sdk": ">=0.1.0"
