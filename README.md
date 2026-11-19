@@ -4,8 +4,9 @@ A [Rack Control Surface](https://github.horinetech.com/rcs-releases/) module tha
 destinations on a Blackmagic Videohub (Smart Videohub, Universal Videohub, Videohub Server) over the
 Videohub Ethernet protocol on TCP port 9990.
 
-- **Routes**: tap a destination, then a source. The 1920×440 panel shows 12 of each per page; the
-  web view shows them all.
+- **Routes**: tap a destination, then a source. The 1920×440 panel shows 12 of each per page; a 16:9
+  touchscreen (1920×1080) gives each section as many rows of 12 as its ports need, up to four, so a 40×40 router
+  shows without paging, with larger labels. The web view shows them all.
 - **Stream Deck**: keys 1 to 10 are sources (with more than 10 inputs, key 10 pages through them),
   keys 11 and 13 step through destinations and key 12 shows the selected one. Hold key 14 or 15 to
   recall the first two salvos. On a larger deck (an XL, 8×4, or a Stream Deck + XL, 9×4) every row but
@@ -15,7 +16,8 @@ Videohub Ethernet protocol on TCP port 9990.
   button on screen) routes it.
 - **Salvos**: store the router's current routes, for all or some destinations, and recall them in one
   go. Recalling asks first on screen and needs a held key on the Stream Deck.
-- **Labels**: shown on the panel, renamed in the web view. Labels live on the router.
+- **Labels**: shown on the panel (on a 16:9 touchscreen, in columns so every port shows), renamed in the web view.
+  Labels live on the router.
 
 ## The router is the source of truth
 
@@ -78,6 +80,6 @@ endorsed by Blackmagic Design.
 | `src/client.ts` | The connection to one Videohub: reconnects, keepalive, ACK/NAK per command |
 | `src/protocol.ts` | Block parsing and the router's state |
 | `src/mock.ts`, `src/mock-cli.ts` | The mock Videohub |
-| `ui/index.html` | The panel UI, 1824×440, in four views: Routes, Salvos, Labels, Setup |
+| `ui/index.html` | The panel UI, 1824×440 or 1824×1080, in four views: Routes, Salvos, Labels, Setup |
 | `web/index.html` | The web view's pages of the same names |
 | `scripts/link-sdk.mjs` | Links `@rcs/*` from a main repo checkout |
