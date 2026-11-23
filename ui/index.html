@@ -43,6 +43,27 @@
       dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 8px 18px; font-size: 15px; }
       dt { color: var(--rcs-muted); }
       dd { margin: 0; font-family: var(--rcs-mono); }
+      .plist { display: none; }
+
+      /* A taller screen (fullPanel, 1824×1080); the 1920×440 bar above is untouched. Routes: each section gets as
+         many rows as its ports need (up to four, so a 40×40 shows without paging), the two sharing the height, with
+         larger labels. Labels: every port in columns instead of a scroll. */
+      @media (min-height: 700px) {
+        .tiles { flex: var(--rows) 1 0; height: auto; min-height: 0; max-height: calc(200px * var(--rows) + 10px * (var(--rows) - 1));
+          grid-template-rows: repeat(var(--rows), minmax(0, 1fr)); grid-auto-rows: 0; }
+        .tiles .lb { font-size: 20px; }
+        #view-labels.cols { overflow: hidden; }
+        #view-labels.cols .ports { display: none; }
+        #view-labels.cols .plist { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+        .plist .head { font-size: 13px; font-weight: 600; letter-spacing: 0.08em; color: var(--rcs-muted); margin-bottom: 6px; }
+        .plist .rows { columns: var(--cols, 1); column-gap: 24px; column-rule: 1px solid var(--rcs-border); }
+        .plist .pr { display: grid; grid-template-columns: 4.2em minmax(0, 1fr) auto; gap: 8px; align-items: baseline; padding: 5px 4px;
+          border-bottom: 1px solid var(--rcs-border); font-size: 15px; break-inside: avoid; white-space: nowrap; }
+        .plist .pr .num { font-family: var(--rcs-mono); color: var(--rcs-muted); font-size: 13px; }
+        .plist .pr .lbl { font-weight: 600; font-family: var(--rcs-mono); overflow: hidden; text-overflow: ellipsis; }
+        .plist .pr .lbl .dim { color: var(--rcs-muted); font-weight: 400; font-family: var(--rcs-font); font-size: 13px; margin-left: 8px; }
+        .plist .pr .lock { font-size: 12px; }
+      }
     </style>
   </head>
   <body>
@@ -87,6 +108,7 @@
           <table><tbody id="inputs"></tbody></table>
           <table><tbody id="outputs"></tbody></table>
         </div>
+        <div class="plist" id="plist"></div>
       </section>
 
       <section id="view-setup" class="setup" hidden>
@@ -114,19 +136,12 @@
 
     <script type="module">
       const $ = (id) => document.getElementById(id);
-      // One row of 12 tiles per section on the 1920×440 bar; three rows on a taller screen (fullPanel).
-      let PER = 12;
-      function fitRows() {
-        const rows = window.innerHeight >= 700 ? 3 : 1;
-        PER = 12 * rows;
-        for (const t of document.querySelectorAll('.tiles')) t.style.setProperty('--rows', rows);
-      }
-      fitRows();
-      window.addEventListener('resize', () => {
-        const before = PER;
-        fitRows();
-        if (before !== PER && s) draw();
-      });
+      // One row of 12 tiles per section on the 1920×440 bar. On a taller screen (fullPanel) each section has as many
+      // rows as its ports need, up to four (48 a page), and the two share the height.
+      const tall = () => window.innerHeight >= 700;
+      const rowsFor = (count) => (tall() ? Math.max(1, Math.min(4, Math.ceil(count / 12))) : 1);
+      const perFor = (count) => 12 * rowsFor(count);
+      window.addEventListener('resize', () => s && draw());
       let s = null;
       let destPage = 0;
       let srcPage = 0;
@@ -158,6 +173,7 @@
 
       function pager(box, page, count, set) {
         box.replaceChildren();
+        const PER = perFor(count);
         const pages = Math.ceil(count / PER);
         if (pages <= 1) return;
         const prev = el('button', { 'aria-label': 'Previous page' }, '◀');
@@ -179,20 +195,30 @@
           $('toSetup').hidden = !!s.config.address;
           return;
         }
-        if (s.selDest !== lastSel) destPage = Math.floor(s.selDest / PER); // follow the keys
+        const PD = perFor(r.outputs);
+        const PS = perFor(r.inputs);
+        $('dests').style.setProperty('--rows', rowsFor(r.outputs));
+        $('srcs').style.setProperty('--rows', rowsFor(r.inputs));
+        if (s.selDest !== lastSel) destPage = Math.floor(s.selDest / PD); // follow the keys
         lastSel = s.selDest;
-        destPage = Math.min(destPage, Math.ceil(r.outputs / PER) - 1);
-        srcPage = Math.min(srcPage, Math.ceil(r.inputs / PER) - 1);
+        destPage = Math.min(destPage, Math.ceil(r.outputs / PD) - 1);
+        srcPage = Math.min(srcPage, Math.ceil(r.inputs / PS) - 1);
+        // Tall: the label as a child, so the page's larger text applies (the tile sets its own size for the attribute).
+        const big = tall();
+        const label = (attrs, text) => {
+          const t = el('rcs-tile', big ? attrs : { ...attrs, label: text });
+          if (big) t.append(el('span', { class: 'lb' }, text));
+          return t;
+        };
 
         const dests = [];
-        for (let o = destPage * PER; o < Math.min(r.outputs, (destPage + 1) * PER); o++) {
+        for (let o = destPage * PD; o < Math.min(r.outputs, (destPage + 1) * PD); o++) {
           const from = r.routes[o];
-          const t = el('rcs-tile', {
+          const t = label({
             number: o + 1,
-            label: r.outputLabels[o],
             sublabel: r.locks[o] === 'L' ? 'LOCKED' : '← ' + (from >= 0 ? r.inputLabels[from] : '?'),
             selected: o === s.selDest
-          });
+          }, r.outputLabels[o]);
           t.onclick = () => rcs.send({ type: 'select-dest', output: o });
           dests.push(t);
         }
@@ -201,8 +227,8 @@
 
         const srcs = [];
         const locked = r.locks[s.selDest] === 'L';
-        for (let i = srcPage * PER; i < Math.min(r.inputs, (srcPage + 1) * PER); i++) {
-          const t = el('rcs-tile', { number: i + 1, label: r.inputLabels[i], on: r.routes[s.selDest] === i, selected: s.armed === i, disabled: locked });
+        for (let i = srcPage * PS; i < Math.min(r.inputs, (srcPage + 1) * PS); i++) {
+          const t = label({ number: i + 1, on: r.routes[s.selDest] === i, selected: s.armed === i, disabled: locked }, r.inputLabels[i]);
           t.onclick = () => rcs.send({ type: 'pick-source', input: i });
           srcs.push(t);
         }
@@ -236,8 +262,43 @@
         );
       }
 
+      // Tall labels: inputs and outputs side by side, each in as many columns as it takes to show every port.
+      function drawLabelsTall(r) {
+        const sec = $('view-labels');
+        const H = sec.clientHeight - (sec.querySelector('.note')?.offsetHeight ?? 0) - 40;
+        const maxRows = Math.max(8, Math.floor(H / 31));
+        const block = (head, n, row) => {
+          const b = el('div');
+          const rows = el('div', { class: 'rows' });
+          rows.style.setProperty('--cols', String(Math.min(3, Math.ceil(n / maxRows))));
+          for (let i = 0; i < n; i++) rows.append(row(i));
+          b.append(el('div', { class: 'head' }, head), rows);
+          return b;
+        };
+        const pr = (num, lbl, extra, lock) => {
+          const d = el('div', { class: 'pr' });
+          const l = el('span', { class: 'lbl' }, lbl);
+          if (extra) l.append(el('span', { class: 'dim' }, extra));
+          d.append(el('span', { class: 'num' }, num), l, el('span', { class: 'lock' }, lock));
+          return d;
+        };
+        $('plist').replaceChildren(
+          block(`INPUTS (${r.inputs})`, r.inputs, (i) => pr(`IN ${i + 1}`, r.inputLabels[i], '', '')),
+          block(`OUTPUTS (${r.outputs})`, r.outputs, (o) =>
+            pr(`OUT ${o + 1}`, r.outputLabels[o], '← ' + (r.routes[o] >= 0 ? r.inputLabels[r.routes[o]] : '?'), r.locks[o] === 'L' ? 'LOCKED' : r.locks[o] === 'O' ? 'OURS' : '')
+          )
+        );
+        // More ports than three columns hold: the page scrolls as before.
+        sec.classList.toggle('cols', sec.scrollHeight <= sec.clientHeight + 1 || Math.max(r.inputs, r.outputs) <= 3 * maxRows);
+      }
+
       function drawLabels() {
         const r = s.router;
+        if (tall()) {
+          $('view-labels').classList.add('cols');
+          drawLabelsTall(r);
+          if ($('view-labels').classList.contains('cols')) return;
+        } else $('view-labels').classList.remove('cols');
         const row = (n, label, extra, lockText) => {
           const tr = el('tr');
           tr.append(el('td', { class: 'num' }, n), el('td', { class: 'lbl' }, label), el('td', { class: 'dim' }, extra));
